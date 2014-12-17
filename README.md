@@ -1,3 +1,11 @@
+Nitrous.IO Docker
+=================
+
+This is a private fork of docker for nitrous.io distributition. Ideally this
+should contain only code used for releasing docker onto Nitrous.IO
+infrastructure and extra patches waiting to be merged / not yet released
+usptream.
+
 Docker: the Linux container engine
 ==================================
 
