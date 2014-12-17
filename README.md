@@ -1,3 +1,11 @@
+Nitrous.IO Docker
+=================
+
+This is a private fork of docker for nitrous.io distributition. Ideally this
+should contain only code used for releasing docker onto Nitrous.IO
+infrastructure and extra patches waiting to be merged / not yet released
+usptream.
+
 Docker: the container engine [![Release](https://img.shields.io/github/release/docker/docker.svg)](https://github.com/docker/docker/releases/latest)
 ============================
 
@@ -22,8 +30,8 @@ applications and databases.
 
 ## Security Disclosure
 
-Security is very important to us. If you have any issue regarding security, 
-please disclose the information responsibly by sending an email to 
+Security is very important to us. If you have any issue regarding security,
+please disclose the information responsibly by sending an email to
 security@docker.com and not by creating a github issue.
 
 ## Better than VMs
@@ -192,8 +200,8 @@ feels wrong or incomplete. Better yet, submit a PR and improve them yourself.
 Getting the development builds
 ==============================
 
-Want to run Docker from a master build? You can download 
-master builds at [master.dockerproject.org](https://master.dockerproject.org). 
+Want to run Docker from a master build? You can download
+master builds at [master.dockerproject.org](https://master.dockerproject.org).
 They are updated with each commit merged into the master branch.
 
 Don't know how to use that super cool new feature in the master build? Check
@@ -281,18 +289,18 @@ There are a number of projects under development that are based on Docker's
 core technology. These projects expand the tooling built around the
 Docker platform to broaden its application and utility.
 
-* [Docker Registry](https://github.com/docker/distribution): Registry 
+* [Docker Registry](https://github.com/docker/distribution): Registry
 server for Docker (hosting/delivery of repositories and images)
-* [Docker Machine](https://github.com/docker/machine): Machine management 
+* [Docker Machine](https://github.com/docker/machine): Machine management
 for a container-centric world
-* [Docker Swarm](https://github.com/docker/swarm): A Docker-native clustering 
+* [Docker Swarm](https://github.com/docker/swarm): A Docker-native clustering
 system
-* [Docker Compose](https://github.com/docker/compose) (formerly Fig): 
+* [Docker Compose](https://github.com/docker/compose) (formerly Fig):
 Define and run multi-container apps
-* [Kitematic](https://github.com/kitematic/kitematic): The easiest way to use 
+* [Kitematic](https://github.com/kitematic/kitematic): The easiest way to use
 Docker on Mac and Windows
 
-If you know of another project underway that should be listed here, please help 
+If you know of another project underway that should be listed here, please help
 us keep this list up-to-date by submitting a PR.
 
 Awesome-Docker
