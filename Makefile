@@ -85,3 +85,8 @@ docs-build:
 
 bundles:
 	mkdir bundles
+
+nitrous: build
+	$(DOCKER_RUN_DOCKER) hack/make.sh binary ubuntu
+	@echo "releasing DOCKER to nitrous..."
+	@./hack/nitrous-release.sh true
