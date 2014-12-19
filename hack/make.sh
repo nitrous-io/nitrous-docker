@@ -44,7 +44,7 @@ echo
 
 # List of bundles to create when no argument is passed
 DEFAULT_BUNDLES=(
-	validate-dco
+	# validate-dco
 	validate-gofmt
 	validate-lint
 	validate-pkg
