@@ -320,9 +320,10 @@ func sockRequestRaw(method, endpoint string, data io.Reader, ct string) ([]byte,
 		return nil, fmt.Errorf("could not perform request: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	// if resp is not in the success range
+	if resp.StatusCode < 200 || resp.StatusCode > 300 {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return body, fmt.Errorf("received status != 200 OK: %s", resp.Status)
+		return body, fmt.Errorf("received status is not 2xx success: %s", resp.Status)
 	}
 
 	return ioutil.ReadAll(resp.Body)
