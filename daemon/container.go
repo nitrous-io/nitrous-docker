@@ -784,6 +784,8 @@ func (container *Container) Exec(execConfig *execConfig) error {
 				c.Close()
 			}
 		}
+		// saves the current pid of exec process
+		execConfig.Pid = pid
 		close(waitStart)
 	}
 

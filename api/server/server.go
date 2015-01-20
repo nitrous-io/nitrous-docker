@@ -1430,10 +1430,33 @@ func (s *Server) postContainerExecResize(version version.Version, w http.Respons
 	return s.daemon.ContainerExecResize(vars["name"], height, width)
 }
 
+func (s *Server) postContainerExecStop(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	timeout, _ := strconv.Atoi(r.Form.Get("t"))
+
+	// TODO (dqminh): t is not implemented right now
+	if err := s.daemon.ContainerExecStop(vars["name"], timeout); err != nil {
+		if err.Error() == "Exec process is stopped" {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *Server) optionsHandler(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
+
 func writeCorsHeaders(w http.ResponseWriter, r *http.Request, corsHeaders string) {
 	logrus.Debugf("CORS header is enabled and set to: %s", corsHeaders)
 	w.Header().Add("Access-Control-Allow-Origin", corsHeaders)
@@ -1556,6 +1579,7 @@ func createRouter(s *Server) *mux.Router {
 			"/containers/{name:.*}/exec":    s.postContainerExecCreate,
 			"/exec/{name:.*}/start":         s.postContainerExecStart,
 			"/exec/{name:.*}/resize":        s.postContainerExecResize,
+			"/exec/{name:.*}/stop":          s.postContainerExecStop,
 			"/containers/{name:.*}/rename":  s.postContainerRename,
 		},
 		"DELETE": {
