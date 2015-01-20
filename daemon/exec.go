@@ -3,6 +3,7 @@ package daemon
 import (
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 type ExecConfig struct {
 	sync.Mutex
 	ID            string
+	Pid           int
 	Running       bool
 	ExitCode      int
 	ProcessConfig *execdriver.ProcessConfig
@@ -274,6 +276,41 @@ func (d *Daemon) ContainerExecStart(name string, stdin io.ReadCloser, stdout io.
 		}
 		return derr.ErrorCodeExecCantRun.WithArgs(ec.ID, container.ID, err)
 	}
+}
+
+func (d *Daemon) ContainerExecStop(name string, timeout int) error {
+	ec, err := d.getExecConfig(name)
+	if err != nil {
+		return derr.ErrorCodeNoExecID.WithArgs(name)
+	}
+
+	ec.Lock()
+	if !ec.Running {
+		ec.Unlock()
+		return derr.ErrorCodeExecNotRunning.WithArgs(name)
+	}
+	ec.Unlock()
+
+	if ec.Pid < 1 {
+		return derr.ErrorCodeExecBadPID.WithArgs(name, ec.Pid)
+	}
+
+	logrus.Debugf("stopping exec command %s with pid %d in container %s", ec.ID, ec.Pid, ec.Container.ID)
+
+	p, err := os.FindProcess(ec.Pid)
+	if err != nil {
+		return derr.ErrorCodeExecCantFindProcess.WithArgs(name, ec.Pid)
+	}
+
+	if err := p.Kill(); err != nil {
+		return derr.ErrorCodeExecCantKill.WithArgs(name, ec.Pid)
+	}
+
+	if _, err = p.Wait(); err != nil {
+		return derr.ErrorCodeExecCantKill.WithArgs(name, ec.Pid)
+	}
+
+	return nil
 }
 
 // Exec calls the underlying exec driver to run

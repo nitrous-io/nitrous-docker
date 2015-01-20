@@ -114,6 +114,28 @@ func (s *router) postContainerExecStart(ctx context.Context, w http.ResponseWrit
 	return nil
 }
 
+func (s *router) postContainerExecStop(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := httputils.ParseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	timeout, _ := strconv.Atoi(r.Form.Get("t"))
+
+	// TODO (dqminh): t is not implemented right now
+	if err := s.daemon.ContainerExecStop(vars["name"], timeout); err != nil {
+		if err.Error() == "Exec process is stopped" {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *router) postContainerExecResize(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := httputils.ParseForm(r); err != nil {
 		return err

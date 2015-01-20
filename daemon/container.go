@@ -825,6 +825,7 @@ func (container *Container) exec(ec *ExecConfig) error {
 				c.Close()
 			}
 		}
+		ec.Pid = pid
 		close(ec.waitStart)
 		return nil
 	}

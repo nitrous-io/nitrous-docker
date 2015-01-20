@@ -692,6 +692,42 @@ var (
 		HTTPStatusCode: http.StatusInternalServerError,
 	})
 
+	// ErrorCodeExecNotRunning is generated when we try to stop an exec
+	// but its not running.
+	ErrorCodeExecNotRunning = errcode.Register(errGroup, errcode.ErrorDescriptor{
+		Value:          "EXECNOTRUNNING",
+		Message:        "Error: Exec command %s is not running",
+		Description:    "An attempt to stop an 'exec' was made, but 'exec' is not running",
+		HTTPStatusCode: http.StatusInternalServerError,
+	})
+
+	// ErrorCodeExecBadPID is generated when we try to stop an exec
+	// but the process has bad pid.
+	ErrorCodeExecBadPID = errcode.Register(errGroup, errcode.ErrorDescriptor{
+		Value:          "EXECBADPID",
+		Message:        "Error: Exec command %s has invalid pid %d",
+		Description:    "An attempt to stop an 'exec' was made, but the pid is invalid",
+		HTTPStatusCode: http.StatusInternalServerError,
+	})
+
+	// ErrorCodeExecCantFindProcess is generated when we try to stop an exec
+	// but the process is not found.
+	ErrorCodeExecCantFindProcess = errcode.Register(errGroup, errcode.ErrorDescriptor{
+		Value:          "EXECCANTFINDPROCESS",
+		Message:        "Error: Exec command %s is not found: %s",
+		Description:    "An attempt to stop an 'exec' was made, but the process is not found",
+		HTTPStatusCode: http.StatusInternalServerError,
+	})
+
+	// ErrorCodeExecCantKill is generated when we try to stop an exec
+	// but it fails to kill the process.
+	ErrorCodeExecCantKill = errcode.Register(errGroup, errcode.ErrorDescriptor{
+		Value:          "EXECCANTKILL",
+		Message:        "Error: Exec command %s is not killed: %s",
+		Description:    "An attempt to stop an 'exec' was made, but the process is not killed",
+		HTTPStatusCode: http.StatusInternalServerError,
+	})
+
 	// ErrorCodeExecCantRun is generated when we try to start an exec
 	// but it failed for some reason.
 	ErrorCodeExecCantRun = errcode.Register(errGroup, errcode.ErrorDescriptor{
