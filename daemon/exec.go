@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 
@@ -18,6 +19,7 @@ import (
 type execConfig struct {
 	sync.Mutex
 	ID            string
+	Pid           int
 	Running       bool
 	ExitCode      int
 	ProcessConfig execdriver.ProcessConfig
@@ -230,6 +232,40 @@ func (d *Daemon) ContainerExecStart(execName string, stdin io.ReadCloser, stdout
 	return nil
 }
 
+func (d *Daemon) ContainerExecStop(execName string, timeout int) error {
+	execConfig, err := d.getExecConfig(execName)
+	if err != nil {
+		return err
+	}
+
+	func() {
+		execConfig.Lock()
+		defer execConfig.Unlock()
+		if !execConfig.Running {
+			err = fmt.Errorf("Error: Exec command %s is stopped", execName)
+		}
+	}()
+	if err != nil {
+		return err
+	}
+	if execConfig.Pid < 1 {
+		return fmt.Errorf("exec %s has invalid pid %d", execConfig.ID, execConfig.Pid)
+	}
+
+	logrus.Debugf("stopping exec command %s with pid %d in container %s", execConfig.ID, execConfig.Pid, execConfig.Container.ID)
+
+	p, err := os.FindProcess(execConfig.Pid)
+	if err != nil {
+		return err
+	}
+	if err := p.Kill(); err != nil {
+		return err
+	}
+	_, err = p.Wait()
+	return err
+}
+
+// This is called by container#monitorExec
 func (d *Daemon) Exec(c *Container, execConfig *execConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
 	exitStatus, err := d.execDriver.Exec(c.command, &execConfig.ProcessConfig, pipes, startCallback)
 
