@@ -23,6 +23,7 @@ BASE=$(basename $0)
 
 # modify these in /etc/default/$BASE (/etc/default/docker)
 DOCKER=/usr/bin/$BASE
+UNSHARE_BINARY=${UNSHARE_BINARY:-/usr/bin/unshare}
 # This is the pid file managed by docker itself
 DOCKER_PIDFILE=/var/run/$BASE.pid
 # This is the pid file created/managed by start-stop-daemon
@@ -99,10 +100,10 @@ case "$1" in
 		log_begin_msg "Starting $DOCKER_DESC: $BASE"
 		start-stop-daemon --start --background \
 			--no-close \
-			--exec "$DOCKER" \
+			--exec "$UNSHARE_BINARY" \
 			--pidfile "$DOCKER_SSD_PIDFILE" \
 			--make-pidfile \
-			-- \
+			-- -m -- "$DOCKER" \
 				-d -p "$DOCKER_PIDFILE" \
 				$DOCKER_OPTS \
 					>> "$DOCKER_LOGFILE" 2>&1
