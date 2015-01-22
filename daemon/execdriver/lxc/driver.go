@@ -521,11 +521,14 @@ func (t *TtyConsole) Close() error {
 	return t.MasterPty.Close()
 }
 
-func (d *driver) Exec(c *execdriver.Command, processConfig *execdriver.ProcessConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
+func (d *driver) Exec(id string, useCgroup bool, c *execdriver.Command, processConfig *execdriver.ProcessConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
 	return -1, ErrExec
 }
 
 func (d *driver) Stats(id string) (*execdriver.ResourceStats, error) {
 	return nil, fmt.Errorf("container stats are not supported with LXC")
+}
 
+func (d *driver) StopExec(id string, useCgroup bool, pid int, c *execdriver.Command) error {
+	return ErrExec
 }
