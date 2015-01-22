@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	systemd "github.com/coreos/go-systemd/dbus"
@@ -171,6 +172,20 @@ func Apply(c *cgroups.Cgroup, pid int) (map[string]string, error) {
 	return paths, nil
 }
 
+// Stop stops the current cgroup unit
+func Stop(c *cgroups.Cgroup) error {
+	unitName := getUnitName(c)
+	_, err := theConn.StopUnit(unitName, "replace")
+	return err
+}
+
+// Kill sends the signal to all processes the current cgroup unit
+func Kill(c *cgroups.Cgroup, signal syscall.Signal) error {
+	unitName := getUnitName(c)
+	theConn.KillUnit(unitName, int32(signal))
+	return nil
+}
+
 func writeFile(dir, file, data string) error {
 	return ioutil.WriteFile(filepath.Join(dir, file), []byte(data), 0700)
 }
@@ -313,5 +328,5 @@ func joinCpuset(c *cgroups.Cgroup, pid int) error {
 
 	s := &fs.CpusetGroup{}
 
-	return s.SetDir(path, c.CpusetCpus, pid)
+	return s.SetDir(path, c.CpusetCpus, c.CpusetMems, pid)
 }

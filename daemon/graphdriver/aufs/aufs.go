@@ -48,6 +48,7 @@ var (
 		graphdriver.FsMagicBtrfs,
 		graphdriver.FsMagicAufs,
 	}
+	backingFs = "<unknown>"
 )
 
 func init() {
@@ -66,20 +67,22 @@ type Driver struct {
 // Init returns a new AUFS driver.
 // An error is returned if AUFS is not supported.
 func Init(root string, options []string) (graphdriver.Driver, error) {
+
 	// Try to load the aufs kernel module
 	if err := supportsAufs(); err != nil {
 		return nil, graphdriver.ErrNotSupported
 	}
 
-	rootdir := path.Dir(root)
-
-	var buf syscall.Statfs_t
-	if err := syscall.Statfs(rootdir, &buf); err != nil {
-		return nil, fmt.Errorf("Couldn't stat the root directory: %s", err)
+	fsMagic, err := graphdriver.GetFSMagic(root)
+	if err != nil {
+		return nil, err
+	}
+	if fsName, ok := graphdriver.FsNames[fsMagic]; ok {
+		backingFs = fsName
 	}
 
 	for _, magic := range incompatibleFsMagic {
-		if graphdriver.FsMagic(buf.Type) == magic {
+		if fsMagic == magic {
 			return nil, graphdriver.ErrIncompatibleFS
 		}
 	}
@@ -167,6 +170,7 @@ func (a *Driver) Status() [][2]string {
 	ids, _ := loadIds(path.Join(a.rootPath(), "layers"))
 	return [][2]string{
 		{"Root Dir", a.rootPath()},
+		{"Backing Filesystem", backingFs},
 		{"Dirs", fmt.Sprintf("%d", len(ids))},
 	}
 }
@@ -299,7 +303,7 @@ func (a *Driver) Get(id, mountLabel string) (string, error) {
 	return out, nil
 }
 
-func (a *Driver) Put(id string) {
+func (a *Driver) Put(id string) error {
 	// Protect the a.active from concurrent access
 	a.Lock()
 	defer a.Unlock()
@@ -314,6 +318,7 @@ func (a *Driver) Put(id string) {
 		}
 		delete(a.active, id)
 	}
+	return nil
 }
 
 // Diff produces an archive of the changes between the specified
@@ -321,8 +326,8 @@ func (a *Driver) Put(id string) {
 func (a *Driver) Diff(id, parent string) (archive.Archive, error) {
 	// AUFS doesn't need the parent layer to produce a diff.
 	return archive.TarWithOptions(path.Join(a.rootPath(), "diff", id), &archive.TarOptions{
-		Compression: archive.Uncompressed,
-		Excludes:    []string{".wh..wh.*"},
+		Compression:     archive.Uncompressed,
+		ExcludePatterns: []string{".wh..wh.*"},
 	})
 }
 
@@ -333,7 +338,7 @@ func (a *Driver) applyDiff(id string, diff archive.ArchiveReader) error {
 // DiffSize calculates the changes between the specified id
 // and its parent and returns the size in bytes of the changes
 // relative to its base filesystem directory.
-func (a *Driver) DiffSize(id, parent string) (bytes int64, err error) {
+func (a *Driver) DiffSize(id, parent string) (size int64, err error) {
 	// AUFS doesn't need the parent layer to calculate the diff size.
 	return utils.TreeSize(path.Join(a.rootPath(), "diff", id))
 }
@@ -341,7 +346,7 @@ func (a *Driver) DiffSize(id, parent string) (bytes int64, err error) {
 // ApplyDiff extracts the changeset from the given diff into the
 // layer with the specified id and parent, returning the size of the
 // new layer in bytes.
-func (a *Driver) ApplyDiff(id, parent string, diff archive.ArchiveReader) (bytes int64, err error) {
+func (a *Driver) ApplyDiff(id, parent string, diff archive.ArchiveReader) (size int64, err error) {
 	// AUFS doesn't need the parent id to apply the diff.
 	if err = a.applyDiff(id, diff); err != nil {
 		return

@@ -1,5 +1,3 @@
-// build linux
-
 package daemon
 
 import (
@@ -30,12 +28,14 @@ type execConfig struct {
 	OpenStdin  bool
 	OpenStderr bool
 	OpenStdout bool
+	UseCgroup  bool
 	Container  *Container
+	PID        int
 }
 
 type execStore struct {
 	s map[string]*execConfig
-	sync.Mutex
+	sync.RWMutex
 }
 
 func newExecStore() *execStore {
@@ -49,9 +49,9 @@ func (e *execStore) Add(id string, execConfig *execConfig) {
 }
 
 func (e *execStore) Get(id string) *execConfig {
-	e.Lock()
+	e.RLock()
 	res := e.s[id]
-	e.Unlock()
+	e.RUnlock()
 	return res
 }
 
@@ -59,6 +59,16 @@ func (e *execStore) Delete(id string) {
 	e.Lock()
 	delete(e.s, id)
 	e.Unlock()
+}
+
+func (e *execStore) List() []string {
+	var IDs []string
+	e.RLock()
+	for id := range e.s {
+		IDs = append(IDs, id)
+	}
+	e.RUnlock()
+	return IDs
 }
 
 func (execConfig *execConfig) Resize(h, w int) error {
@@ -138,11 +148,14 @@ func (d *Daemon) ContainerExecCreate(job *engine.Job) engine.Status {
 		OpenStdin:     config.AttachStdin,
 		OpenStdout:    config.AttachStdout,
 		OpenStderr:    config.AttachStderr,
+		UseCgroup:     config.UseCgroup,
 		StreamConfig:  StreamConfig{},
 		ProcessConfig: processConfig,
 		Container:     container,
 		Running:       false,
 	}
+
+	container.LogEvent("exec_create: " + execConfig.ProcessConfig.Entrypoint + " " + strings.Join(execConfig.ProcessConfig.Arguments, " "))
 
 	d.registerExecCommand(execConfig)
 
@@ -181,6 +194,8 @@ func (d *Daemon) ContainerExecStart(job *engine.Job) engine.Status {
 
 	log.Debugf("starting exec command %s in container %s", execConfig.ID, execConfig.Container.ID)
 	container := execConfig.Container
+
+	container.LogEvent("exec_start: " + execConfig.ProcessConfig.Entrypoint + " " + strings.Join(execConfig.ProcessConfig.Arguments, " "))
 
 	if execConfig.OpenStdin {
 		r, w := io.Pipe()
@@ -235,8 +250,44 @@ func (d *Daemon) ContainerExecStart(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
+func (d *Daemon) ContainerExecStop(job *engine.Job) engine.Status {
+	if len(job.Args) != 1 {
+		return job.Errorf("Usage: %s [options] exec", job.Name)
+	}
+
+	var (
+		execName = job.Args[0]
+	)
+
+	execConfig, err := d.getExecConfig(execName)
+	if err != nil {
+		return job.Error(err)
+	}
+
+	func() {
+		execConfig.Lock()
+		defer execConfig.Unlock()
+		if !execConfig.Running {
+			err = fmt.Errorf("Error: Exec command %s is stopped", execName)
+		}
+	}()
+	if err != nil {
+		return job.Error(err)
+	}
+
+	log.Debugf("stopping exec command %s, pid: %d in container %s", execConfig.ID, execConfig.PID, execConfig.Container.ID)
+
+	if err := d.execDriver.StopExec(execConfig.ID, execConfig.UseCgroup, execConfig.PID,
+		execConfig.Container.command); err != nil {
+		return job.Error(err)
+	}
+
+	return engine.StatusOK
+}
+
+// This is called by container#monitorExec
 func (d *Daemon) Exec(c *Container, execConfig *execConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
-	exitStatus, err := d.execDriver.Exec(c.command, &execConfig.ProcessConfig, pipes, startCallback)
+	exitStatus, err := d.execDriver.Exec(execConfig.ID, execConfig.UseCgroup, c.command, &execConfig.ProcessConfig, pipes, startCallback)
 
 	// On err, make sure we don't leave ExitCode at zero
 	if err != nil && exitStatus == 0 {
@@ -249,6 +300,10 @@ func (d *Daemon) Exec(c *Container, execConfig *execConfig, pipes *execdriver.Pi
 	return exitStatus, err
 }
 
+func (container *Container) GetExecIDs() []string {
+	return container.execCommands.List()
+}
+
 func (container *Container) Exec(execConfig *execConfig) error {
 	container.Lock()
 	defer container.Unlock()
@@ -256,6 +311,7 @@ func (container *Container) Exec(execConfig *execConfig) error {
 	waitStart := make(chan struct{})
 
 	callback := func(processConfig *execdriver.ProcessConfig, pid int) {
+		execConfig.PID = pid
 		if processConfig.Tty {
 			// The callback is called after the process Start()
 			// so we are in the parent process. In TTY mode, stdin/out/err is the PtySlave
@@ -281,6 +337,7 @@ func (container *Container) Exec(execConfig *execConfig) error {
 	return nil
 }
 
+// this is called by container#Exec
 func (container *Container) monitorExec(execConfig *execConfig, callback execdriver.StartCallback) error {
 	var (
 		err      error

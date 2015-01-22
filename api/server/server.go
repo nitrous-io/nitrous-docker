@@ -27,6 +27,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/docker/docker/api"
+	"github.com/docker/docker/daemon/networkdriver/portallocator"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/pkg/listenbuffer"
 	"github.com/docker/docker/pkg/parsers"
@@ -410,6 +411,19 @@ func getContainersJSON(eng *engine.Engine, version version.Version, w http.Respo
 	return nil
 }
 
+func getContainersStats(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	name := vars["name"]
+	job := eng.Job("container_stats", name)
+	streamJSON(job, w, true)
+	return job.Run()
+}
+
 func getContainersLogs(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := parseForm(r); err != nil {
 		return err
@@ -607,6 +621,18 @@ func getImagesSearch(eng *engine.Engine, version version.Version, w http.Respons
 	return job.Run()
 }
 
+func getImageManifest(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+
+	job := eng.Job("image_manifest", vars["name"])
+	job.Setenv("tag", r.Form.Get("tag"))
+	job.Stdout.Add(utils.NewWriteFlusher(w))
+
+	return job.Run()
+}
+
 func postImagesPush(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
@@ -638,9 +664,15 @@ func postImagesPush(eng *engine.Engine, version version.Version, w http.Response
 		}
 	}
 
+	manifest, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+
 	job := eng.Job("push", vars["name"])
 	job.SetenvJson("metaHeaders", metaHeaders)
 	job.SetenvJson("authConfig", authConfig)
+	job.Setenv("manifest", string(manifest))
 	job.Setenv("tag", r.Form.Get("tag"))
 	if version.GreaterThan("1.0") {
 		job.SetenvBool("json", true)
@@ -730,6 +762,24 @@ func postContainersRestart(eng *engine.Engine, version version.Version, w http.R
 		return fmt.Errorf("Missing parameter")
 	}
 	job := eng.Job("restart", vars["name"])
+	job.Setenv("t", r.Form.Get("t"))
+	if err := job.Run(); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func postContainerRename(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+
+	newName := r.URL.Query().Get("name")
+	job := eng.Job("container_rename", vars["name"], newName)
 	job.Setenv("t", r.Form.Get("t"))
 	if err := job.Run(); err != nil {
 		return err
@@ -1034,6 +1084,7 @@ func postBuild(eng *engine.Engine, version version.Version, w http.ResponseWrite
 	}
 	job.Stdin.Add(r.Body)
 	job.Setenv("remote", r.FormValue("remote"))
+	job.Setenv("dockerfile", r.FormValue("dockerfile"))
 	job.Setenv("t", r.FormValue("t"))
 	job.Setenv("q", r.FormValue("q"))
 	job.Setenv("nocache", r.FormValue("nocache"))
@@ -1182,6 +1233,27 @@ func postContainerExecResize(eng *engine.Engine, version version.Version, w http
 	return nil
 }
 
+func postContainerExecStop(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	job := eng.Job("execStop", vars["name"])
+	// TODO (dqminh): t is not implemented right now
+	job.Setenv("t", r.Form.Get("t"))
+	if err := job.Run(); err != nil {
+		if err.Error() == "Exec process is stopped" {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func optionsHandler(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	w.WriteHeader(http.StatusOK)
 	return nil
@@ -1259,7 +1331,7 @@ func AttachProfiler(router *mux.Router) {
 	router.HandleFunc("/debug/pprof/threadcreate", pprof.Handler("threadcreate").ServeHTTP)
 }
 
-func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion string) (*mux.Router, error) {
+func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion string) *mux.Router {
 	r := mux.NewRouter()
 	if os.Getenv("DEBUG") != "" {
 		AttachProfiler(r)
@@ -1274,6 +1346,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 			"/images/viz":                     getImagesViz,
 			"/images/search":                  getImagesSearch,
 			"/images/get":                     getImagesGet,
+			"/images/{name:.*}/manifest":      getImageManifest,
 			"/images/{name:.*}/get":           getImagesGet,
 			"/images/{name:.*}/history":       getImagesHistory,
 			"/images/{name:.*}/json":          getImagesByName,
@@ -1284,6 +1357,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 			"/containers/{name:.*}/json":      getContainersByName,
 			"/containers/{name:.*}/top":       getContainersTop,
 			"/containers/{name:.*}/logs":      getContainersLogs,
+			"/containers/{name:.*}/stats":     getContainersStats,
 			"/containers/{name:.*}/attach/ws": wsContainersAttach,
 			"/exec/{id:.*}/json":              getExecByID,
 		},
@@ -1309,6 +1383,8 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 			"/containers/{name:.*}/exec":    postContainerExecCreate,
 			"/exec/{name:.*}/start":         postContainerExecStart,
 			"/exec/{name:.*}/resize":        postContainerExecResize,
+			"/exec/{name:.*}/stop":          postContainerExecStop,
+			"/containers/{name:.*}/rename":  postContainerRename,
 		},
 		"DELETE": {
 			"/containers/{name:.*}": deleteContainers,
@@ -1340,30 +1416,23 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 		}
 	}
 
-	return r, nil
+	return r
 }
 
 // ServeRequest processes a single http request to the docker remote api.
 // FIXME: refactor this to be part of Server and not require re-creating a new
 // router each time. This requires first moving ListenAndServe into Server.
-func ServeRequest(eng *engine.Engine, apiversion version.Version, w http.ResponseWriter, req *http.Request) error {
-	router, err := createRouter(eng, false, true, "")
-	if err != nil {
-		return err
-	}
+func ServeRequest(eng *engine.Engine, apiversion version.Version, w http.ResponseWriter, req *http.Request) {
+	router := createRouter(eng, false, true, "")
 	// Insert APIVERSION into the request as a convenience
 	req.URL.Path = fmt.Sprintf("/v%s%s", apiversion, req.URL.Path)
 	router.ServeHTTP(w, req)
-	return nil
 }
 
 // serveFd creates an http.Server and sets it up to serve given a socket activated
 // argument.
 func serveFd(addr string, job *engine.Job) error {
-	r, err := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
-	if err != nil {
-		return err
-	}
+	r := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
 
 	ls, e := systemd.ListenFD(addr)
 	if e != nil {
@@ -1398,7 +1467,7 @@ func serveFd(addr string, job *engine.Job) error {
 }
 
 func lookupGidByName(nameOrGid string) (int, error) {
-	groupFile, err := user.GetGroupFile()
+	groupFile, err := user.GetGroupPath()
 	if err != nil {
 		return -1, err
 	}
@@ -1475,10 +1544,7 @@ func setSocketGroup(addr, group string) error {
 }
 
 func setupUnixHttp(addr string, job *engine.Job) (*HttpServer, error) {
-	r, err := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
-	if err != nil {
-		return nil, err
-	}
+	r := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
 
 	if err := syscall.Unlink(addr); err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -1502,18 +1568,45 @@ func setupUnixHttp(addr string, job *engine.Job) (*HttpServer, error) {
 	return &HttpServer{&http.Server{Addr: addr, Handler: r}, l}, nil
 }
 
+func allocateDaemonPort(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+
+	intPort, err := strconv.Atoi(port)
+	if err != nil {
+		return err
+	}
+
+	var hostIPs []net.IP
+	if parsedIP := net.ParseIP(host); parsedIP != nil {
+		hostIPs = append(hostIPs, parsedIP)
+	} else if hostIPs, err = net.LookupIP(host); err != nil {
+		return fmt.Errorf("failed to lookup %s address in host specification", host)
+	}
+
+	for _, hostIP := range hostIPs {
+		if _, err := portallocator.RequestPort(hostIP, "tcp", intPort); err != nil {
+			return fmt.Errorf("failed to allocate daemon listening port %d (err: %v)", intPort, err)
+		}
+	}
+	return nil
+}
+
 func setupTcpHttp(addr string, job *engine.Job) (*HttpServer, error) {
 	if !strings.HasPrefix(addr, "127.0.0.1") && !job.GetenvBool("TlsVerify") {
 		log.Infof("/!\\ DON'T BIND ON ANOTHER IP ADDRESS THAN 127.0.0.1 IF YOU DON'T KNOW WHAT YOU'RE DOING /!\\")
 	}
 
-	r, err := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
+	r := createRouter(job.Eng, job.GetenvBool("Logging"), job.GetenvBool("EnableCors"), job.Getenv("Version"))
+
+	l, err := newListener("tcp", addr, job.GetenvBool("BufferRequests"))
 	if err != nil {
 		return nil, err
 	}
 
-	l, err := newListener("tcp", addr, job.GetenvBool("BufferRequests"))
-	if err != nil {
+	if err := allocateDaemonPort(addr); err != nil {
 		return nil, err
 	}
 
