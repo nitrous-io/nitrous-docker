@@ -32,19 +32,24 @@ To list the help on any command just execute the command, followed by the `--hel
 
 ## Option types
 
-Single character commandline options can be combined, so rather than
+Single character command line options can be combined, so rather than
 typing `docker run -t -i --name test busybox sh`,
 you can write `docker run -ti --name test busybox sh`.
 
 ### Boolean
 
-Boolean options look like `-d=false`. The value you
-see is the default value which gets set if you do **not** use the
-boolean flag. If you do call `run -d`, that sets the
-opposite boolean value, so in this case, `true`, and
-so `docker run -d` **will** run in "detached" mode,
-in the background. Other boolean options are similar – specifying them
-will set the value to the opposite of the default value.
+Boolean options take the form `-d=false`. The value you see in the help text is the
+default value which is set if you do **not** specify that flag. If you specify
+a Boolean flag without a value, this will set the flag to `true`, irrespective
+of the default value.
+
+For example, running `docker run -d` will set the value to `true`, so
+your container **will** run in "detached" mode, in the background.
+
+Options which default to `true` (e.g., `docker build --rm=true`) can only
+be set to the non-default value by explicitly setting them to `false`:
+
+    $ docker build --rm=false .
 
 ### Multi
 
@@ -139,7 +144,7 @@ for un-encrypted, and port `2376` for encrypted communication with the daemon.
 > for security reasons.
 
 On Systemd based systems, you can communicate with the daemon via
-[systemd socket activation](http://0pointer.de/blog/projects/socket-activation.html), use
+[Systemd socket activation](http://0pointer.de/blog/projects/socket-activation.html), use
 `docker -d -H fd://`. Using `fd://` will work perfectly for most setups but
 you can also specify individual sockets: `docker -d -H fd://3`. If the
 specified socket activated files aren't found, then Docker will exit. You
@@ -334,7 +339,7 @@ The devicemapper options are prefixed with `dm`. Currently supported options are
 
     Enables or disables the use of blkdiscard when removing devicemapper
     devices. This is enabled by default (only) if using loopback devices and is
-    required to res-parsify the loopback file on image/container removal.
+    required to resparsify the loopback file on image/container removal.
 
     Disabling this on loopback can lead to *much* faster container removal
     times, but will make the space used in `/var/lib/docker` directory not be
@@ -450,29 +455,24 @@ Docker supports softlinks for the Docker data directory
       --no-stdin=false    Do not attach STDIN
       --sig-proxy=true    Proxy all received signals to the process (non-TTY mode only). SIGCHLD, SIGKILL, and SIGSTOP are not proxied.
 
-The `attach` command lets you view or interact with any running container's
-primary process (`pid 1`).
+The `docker attach` command allows you to attach to a running container using
+the container's ID or name, either to view its ongoing output or to control it
+interactively.  You can attach to the same contained process multiple times
+simultaneously, screen sharing style, or quickly view the progress of your
+daemonized process.
 
-You can attach to the same contained process multiple times simultaneously, screen
-sharing style, or quickly view the progress of your daemonized process.
+You can detach from the container (and leave it running) with `CTRL-p CTRL-q`
+(for a quiet exit) or `CTRL-c` which will send a `SIGKILL` to the container.
+When you are attached to a container, and exit its main process, the process's
+exit code will be returned to the client.
 
-> **Note:** This command is not for running a new process in a container.
-> See: [`docker exec`](#exec).
-
-You can detach from the container again (and leave it running) with
-`CTRL-p CTRL-q` (for a quiet exit), or `CTRL-c`  which will send a
-SIGKILL to the container, or `CTRL-\` to get a stacktrace of the
-Docker client when it quits. When you detach from the container's
-process the exit code will be returned to the client.
-
-To stop a container, use `docker stop`.
-
-To kill the container, use `docker kill`.
+It is forbidden to redirect the standard input of a `docker attach` command while
+attaching to a tty-enabled container (i.e.: launched with `-t`).
 
 #### Examples
 
-    $ ID=$(sudo docker run -d ubuntu /usr/bin/top -b)
-    $ sudo docker attach $ID
+    $ sudo docker run -d --name topdemo ubuntu /usr/bin/top -b)
+    $ sudo docker attach topdemo
     top - 02:05:52 up  3:05,  0 users,  load average: 0.01, 0.02, 0.05
     Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
     Cpu(s):  0.1%us,  0.2%sy,  0.0%ni, 99.7%id,  0.0%wa,  0.0%hi,  0.0%si,  0.0%st
@@ -501,7 +501,23 @@ To kill the container, use `docker kill`.
      PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND
           1 root      20   0 17208 1144  932 R    0  0.3   0:00.03 top
     ^C$
-    $ sudo docker stop $ID
+    $ echo $?
+    0
+    $ docker ps -a | grep topdemo
+    7998ac8581f9        ubuntu:14.04        "/usr/bin/top -b"   38 seconds ago      Exited (0) 21 seconds ago                          topdemo 
+
+And in this second example, you can see the exit code returned by the `bash` process
+is returned by the `docker attach` command to its caller too:
+
+    $ sudo docker run --name test -d -it debian
+    275c44472aebd77c926d4527885bb09f2f6db21d878c75f0a1c212c03d3bcfab
+    $ sudo docker attach test
+    $$ exit 13
+    exit
+    $ echo $?
+    13
+    $ sudo docker ps -a | grep test
+    275c44472aeb        debian:7            "/bin/bash"         26 seconds ago      Exited (13) 17 seconds ago                         test
 
 ## build
 
@@ -946,7 +962,7 @@ You'll need two shells for this example.
     2014-05-10T17:42:14.999999999Z07:00 7805c1d35632: (from redis:2.8) die
     2014-09-03T17:42:14.999999999Z07:00 7805c1d35632: (from redis:2.8) stop
 
-    $ sudo docker events --since '2013-09-03 15:49:29 +0200 CEST'
+    $ sudo docker events --since '2013-09-03T15:49:29'
     2014-09-03T15:49:29.999999999Z07:00 4386fb97867d: (from ubuntu-1:14.04) die
     2014-05-10T17:42:14.999999999Z07:00 4386fb97867d: (from ubuntu-1:14.04) stop
     2014-05-10T17:42:14.999999999Z07:00 7805c1d35632: (from redis:2.8) die
@@ -1450,12 +1466,12 @@ The `docker rename` command allows the container to be renamed to a different na
       -s, --size=false      Display total file sizes
       --since=""            Show only containers created since Id or Name, include non-running ones.
 
-Running `docker ps` showing 2 linked containers.
+Running `docker ps --no-trunc` showing 2 linked containers.
 
     $ sudo docker ps
-    CONTAINER ID        IMAGE                        COMMAND                CREATED              STATUS              PORTS               NAMES
-    4c01db0b339c        ubuntu:12.04                 bash                   17 seconds ago       Up 16 seconds                           webapp
-    d7886598dbe2        crosbymichael/redis:latest   /redis-server --dir    33 minutes ago       Up 33 minutes       6379/tcp            redis,webapp/db
+    CONTAINER ID                                                            IMAGE                        COMMAND                CREATED              STATUS              PORTS               NAMES
+    f7ee772232194fcc088c6bdec6ea09f7b3f6c54d53934658164b8602d7cd4744        ubuntu:12.04                 bash                   17 seconds ago       Up 16 seconds                           webapp
+    d0963715a061c7c7b7cc80b2646da913a959fbf13e80a971d4a60f6997a2f595        crosbymichael/redis:latest   /redis-server --dir    33 minutes ago       Up 33 minutes       6379/tcp            redis,webapp/db
 
 `docker ps` will show only running containers by default. To see all containers:
 `docker ps -a`
@@ -1678,6 +1694,19 @@ information about the `--expose`, `-p`, `-P` and `--link` parameters,
 and linking containers.
 
 #### Examples
+
+    $ sudo docker run --name test -it debian
+    $$ exit 13
+    exit
+    $ echo $?
+    13
+    $ sudo docker ps -a | grep test
+    275c44472aeb        debian:7            "/bin/bash"         26 seconds ago      Exited (13) 17 seconds ago                         test
+
+In this example, we are running `bash` interactively in the `debian:latest` image, and giving
+the container the name `test`. We then quit `bash` by running `exit 13`, which means `bash`
+will have an exit code of `13`. This is then passed on to the caller of `docker run`, and
+is recorded in the `test` container metadata.
 
     $ sudo docker run --cidfile /tmp/docker_test.cid ubuntu echo "test"
 
@@ -2031,6 +2060,8 @@ more details on finding shared images from the command line.
     Display a live stream of one or more containers' resource usage statistics
 
       --help=false       Print usage
+
+> **Note**: this functionality currently only works when using the *libcontainer* exec-driver.
 
 Running `docker stats` on multiple containers
 

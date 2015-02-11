@@ -72,7 +72,7 @@ func (s *TagStore) CmdPull(job *engine.Job) engine.Status {
 		logName += ":" + tag
 	}
 
-	if len(repoInfo.Index.Mirrors) == 0 && (repoInfo.Index.Official || endpoint.Version == registry.APIVersion2) {
+	if len(repoInfo.Index.Mirrors) == 0 && ((repoInfo.Official && repoInfo.Index.Official) || endpoint.Version == registry.APIVersion2) {
 		j := job.Eng.Job("trust_update_base")
 		if err = j.Run(); err != nil {
 			log.Errorf("error updating trust base graph: %s", err)
@@ -153,7 +153,6 @@ func (s *TagStore) pullRepository(r *registry.Session, out io.Writer, repoInfo *
 	for _, image := range repoData.ImgList {
 		downloadImage := func(img *registry.ImgData) {
 			if askedTag != "" && img.Tag != askedTag {
-				log.Debugf("(%s) does not match %s (id: %s), skipping", img.Tag, askedTag, img.ID)
 				if parallel {
 					errors <- nil
 				}
@@ -388,6 +387,9 @@ func (s *TagStore) pullV2Repository(eng *engine.Engine, r *registry.Session, out
 		if err != nil {
 			return err
 		}
+		if len(tags) == 0 {
+			return registry.ErrDoesNotExist
+		}
 		for _, t := range tags {
 			if downloaded, err := s.pullV2Tag(eng, r, out, endpoint, repoInfo, t, sf, parallel, auth); err != nil {
 				return err
@@ -418,7 +420,7 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 		return false, err
 	}
 
-	manifest, verified, err := s.verifyManifest(eng, manifestBytes)
+	manifest, verified, err := s.loadManifest(eng, manifestBytes)
 	if err != nil {
 		return false, fmt.Errorf("error verifying manifest: %s", err)
 	}
@@ -554,7 +556,7 @@ func (s *TagStore) pullV2Tag(eng *engine.Engine, r *registry.Session, out io.Wri
 
 	}
 
-	out.Write(sf.FormatStatus(repoInfo.CanonicalName+":"+tag, "The image you are pulling has been verified - This is a tech preview, don't rely on it for security yet."))
+	out.Write(sf.FormatStatus(repoInfo.CanonicalName+":"+tag, "The image you are pulling has been verified. Important: image verification is a tech preview feature and should not be relied on to provide security."))
 
 	if err = s.Set(repoInfo.LocalName, tag, downloads[0].img.ID, true); err != nil {
 		return false, err

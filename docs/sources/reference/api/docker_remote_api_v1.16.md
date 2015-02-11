@@ -36,7 +36,7 @@ List containers
         [
              {
                      "Id": "8dfafdbc3a40",
-                     "Image": "base:latest",
+                     "Image": "ubuntu:latest",
                      "Command": "echo 1",
                      "Created": 1367854155,
                      "Status": "Exit 0",
@@ -46,7 +46,7 @@ List containers
              },
              {
                      "Id": "9cd87474be90",
-                     "Image": "base:latest",
+                     "Image": "ubuntu:latest",
                      "Command": "echo 222222",
                      "Created": 1367854155,
                      "Status": "Exit 0",
@@ -56,7 +56,7 @@ List containers
              },
              {
                      "Id": "3176a2479c92",
-                     "Image": "base:latest",
+                     "Image": "ubuntu:latest",
                      "Command": "echo 3333333333333333",
                      "Created": 1367854154,
                      "Status": "Exit 0",
@@ -66,7 +66,7 @@ List containers
              },
              {
                      "Id": "4cb07b47f9fb",
-                     "Image": "base:latest",
+                     "Image": "ubuntu:latest",
                      "Command": "echo 444444444444444444444444444444444",
                      "Created": 1367854152,
                      "Status": "Exit 0",
@@ -128,7 +128,7 @@ Create a container
                      "date"
              ],
              "Entrypoint": "",
-             "Image": "base",
+             "Image": "ubuntu",
              "Volumes": {
                      "/tmp": {}
              },
@@ -148,6 +148,7 @@ Create a container
                "Privileged": false,
                "Dns": ["8.8.8.8"],
                "DnsSearch": [""],
+               "ExtraHosts": null,
                "VolumesFrom": ["parent", "other:ro"],
                "CapAdd": ["NET_ADMIN"],
                "CapDrop": ["MKNOD"],
@@ -220,6 +221,8 @@ Json Parameters:
         a boolean value.
   -   **Dns** - A list of dns servers for the container to use.
   -   **DnsSearch** - A list of DNS search domains
+  -   **ExtraHosts** - A list of hostnames/IP mappings to be added to the
+      container's `/etc/hosts` file. Specified in the form `["hostname:IP"]`.
   -   **VolumesFrom** - A list of volumes to inherit from another container.
         Specified in the form `<container name>[:<ro|rw>]`
   -   **CapAdd** - A list of kernel capabilties to add to the container.
@@ -288,7 +291,7 @@ Return low-level information on the container `id`
                                      "date"
                              ],
                              "Dns": null,
-                             "Image": "base",
+                             "Image": "ubuntu",
                              "Volumes": {},
                              "VolumesFrom": "",
                              "WorkingDir": ""
@@ -713,6 +716,41 @@ Status Codes:
     4.  Read the extracted size and output it on the correct output
     5.  Goto 1
 
+### Attach to a container (websocket)
+
+`GET /containers/(id)/attach/ws`
+
+Attach to the container `id` via websocket
+
+Implements websocket protocol handshake according to [RFC 6455](http://tools.ietf.org/html/rfc6455)
+
+**Example request**
+
+        GET /containers/e90e34656806/attach/ws?logs=0&stream=1&stdin=1&stdout=1&stderr=1 HTTP/1.1
+
+**Example response**
+
+        {{ STREAM }}
+
+Query Parameters:
+
+-   **logs** – 1/True/true or 0/False/false, return logs. Default false
+-   **stream** – 1/True/true or 0/False/false, return stream.
+        Default false
+-   **stdin** – 1/True/true or 0/False/false, if stream=true, attach
+        to stdin. Default false
+-   **stdout** – 1/True/true or 0/False/false, if logs=true, return
+        stdout log, if stream=true, attach to stdout. Default false
+-   **stderr** – 1/True/true or 0/False/false, if logs=true, return
+        stderr log, if stream=true, attach to stderr. Default false
+
+Status Codes:
+
+-   **200** – no error
+-   **400** – bad parameter
+-   **404** – no such container
+-   **500** – server error
+
 ### Wait a container
 
 `POST /containers/(id)/wait`
@@ -847,7 +885,7 @@ Create an image, either by pulling it from the registry or by importing it
 
 **Example request**:
 
-        POST /images/create?fromImage=base HTTP/1.1
+        POST /images/create?fromImage=ubuntu HTTP/1.1
 
 **Example response**:
 
@@ -891,7 +929,7 @@ Return low-level information on the image `name`
 
 **Example request**:
 
-        GET /images/base/json HTTP/1.1
+        GET /images/ubuntu/json HTTP/1.1
 
 **Example response**:
 
@@ -917,7 +955,7 @@ Return low-level information on the image `name`
                              "Env": null,
                              "Cmd": ["/bin/bash"],
                              "Dns": null,
-                             "Image": "base",
+                             "Image": "ubuntu",
                              "Volumes": null,
                              "VolumesFrom": "",
                              "WorkingDir": ""
@@ -941,7 +979,7 @@ Return the history of the image `name`
 
 **Example request**:
 
-        GET /images/base/history HTTP/1.1
+        GET /images/ubuntu/history HTTP/1.1
 
 **Example response**:
 
@@ -1160,6 +1198,7 @@ Query Parameters:
 
 -   **t** – repository name (and optionally a tag) to be applied to
         the resulting image in case of success
+-   **remote** – git or HTTP/HTTPS URI build source
 -   **q** – suppress verbose build output
 -   **nocache** – do not use the cache when building the image
 -   **pull** - attempt to pull the image even if an older image exists locally
@@ -1389,10 +1428,10 @@ and Docker images will report:
         HTTP/1.1 200 OK
         Content-Type: application/json
 
-        {"status": "create", "id": "dfdf82bd3881","from": "base:latest", "time":1374067924}
-        {"status": "start", "id": "dfdf82bd3881","from": "base:latest", "time":1374067924}
-        {"status": "stop", "id": "dfdf82bd3881","from": "base:latest", "time":1374067966}
-        {"status": "destroy", "id": "dfdf82bd3881","from": "base:latest", "time":1374067970}
+        {"status": "create", "id": "dfdf82bd3881","from": "ubuntu:latest", "time":1374067924}
+        {"status": "start", "id": "dfdf82bd3881","from": "ubuntu:latest", "time":1374067924}
+        {"status": "stop", "id": "dfdf82bd3881","from": "ubuntu:latest", "time":1374067966}
+        {"status": "destroy", "id": "dfdf82bd3881","from": "ubuntu:latest", "time":1374067970}
 
 Query Parameters:
 

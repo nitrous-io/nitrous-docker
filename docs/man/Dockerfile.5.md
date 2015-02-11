@@ -138,7 +138,7 @@ or
  whitespace.
  The ADD instruction copies new files, directories
  or remote file URLs to the filesystem of the container at path <dest>.
- Mutliple <src> resources may be specified but if they are files or directories
+ Multiple <src> resources may be specified but if they are files or directories
  then they must be relative to the source directory that is being built
  (the context of the build). The <dest> is the absolute path, or path relative
  to `WORKDIR`, into which the source is copied inside the target container.
@@ -195,7 +195,7 @@ or
 
 **WORKDIR**
  -- **WORKDIR /path/to/workdir**
- The WORKDIR instruction sets the working directory for the **RUN**, **CMD**, and **ENTRYPOINT** Dockerfile commands that follow it.
+ The WORKDIR instruction sets the working directory for the **RUN**, **CMD**, **ENTRYPOINT**, **COPY** and **ADD** Dockerfile commands that follow it.
  It can be used multiple times in a single Dockerfile. Relative paths are defined relative to the path of the previous **WORKDIR** instruction. For example:
  **WORKDIR /a WORKDIR b WORKDIR c RUN pwd** 
  In the above example, the output of the **pwd** command is **a/b/c**.
