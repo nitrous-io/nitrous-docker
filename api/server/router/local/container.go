@@ -269,6 +269,20 @@ func (s *router) postContainersRestart(ctx context.Context, w http.ResponseWrite
 	return nil
 }
 
+func (s *router) postContainersReload(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := httputils.ParseForm(r); err != nil {
+		return err
+	}
+	if vars == nil || vars["name"] == "" {
+		return fmt.Errorf("Missing parameter: name")
+	}
+	if err := s.daemon.ContainerReload(vars["name"]); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *router) postContainersPause(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")

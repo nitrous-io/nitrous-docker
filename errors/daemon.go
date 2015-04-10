@@ -594,6 +594,15 @@ var (
 		HTTPStatusCode: http.StatusInternalServerError,
 	})
 
+	// ErrorCodeCantReload is generated when we try to reload but
+	// got errors
+	ErrorCodeCantReload = errcode.Register(errGroup, errcode.ErrorDescriptor{
+		Value:          "CANTRELOAD",
+		Message:        "Error when reloading container %s: %s",
+		Description:    "An attempt was made to reload a container but got an error",
+		HTTPStatusCode: http.StatusInternalServerError,
+	})
+
 	// ErrorCodePauseError is generated when we try to pause a container
 	// but failed.
 	ErrorCodePauseError = errcode.Register(errGroup, errcode.ErrorDescriptor{
