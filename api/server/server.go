@@ -973,6 +973,20 @@ func (s *Server) postContainersRestart(version version.Version, w http.ResponseW
 	return nil
 }
 
+func (s *Server) postContainersReload(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	if err := s.daemon.ContainerReload(vars["name"]); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *Server) postContainerRename(version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := parseForm(r); err != nil {
 		return err
@@ -1698,6 +1712,7 @@ func createRouter(s *Server) *mux.Router {
 			"/exec/{name:.*}/resize":        s.postContainerExecResize,
 			"/exec/{name:.*}/stop":          s.postContainerExecStop,
 			"/containers/{name:.*}/rename":  s.postContainerRename,
+			"/containers/{name:.*}/reload":  s.postContainersReload,
 		},
 		"PUT": {
 			"/containers/{name:.*}/archive": s.putContainersArchive,
