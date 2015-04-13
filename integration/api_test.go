@@ -429,6 +429,8 @@ func TestPostContainersReread(t *testing.T) {
 		t,
 	)
 
+	// This is to get root directory for the container
+	// Use the api to get the container information, since there is no direct access to daemon
 	req, err := http.NewRequest("GET", "/info?t=1", bytes.NewReader([]byte{}))
 	if err != nil {
 		t.Fatal(err)
@@ -445,6 +447,9 @@ func TestPostContainersReread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to decode response body: %v", r)
 	}
+
+	// Read config.json file and change it.
+	// I don't use container.ToDisk() to simulate it properly.
 	configFilePath := fmt.Sprintf("%s/containers/%s/config.json", infoResponse.DockerRootDir, containerID)
 
 	_, err = os.Lstat(configFilePath)
@@ -478,6 +483,7 @@ func TestPostContainersReread(t *testing.T) {
 
 	ioutil.WriteFile(configFilePath, data, 0666)
 
+	// Read hostconfig.json file and change it.
 	hostConfigFilePath := fmt.Sprintf("%s/containers/%s/hostconfig.json", infoResponse.DockerRootDir, containerID)
 	_, err = os.Lstat(hostConfigFilePath)
 	if os.IsNotExist(err) {
@@ -503,6 +509,7 @@ func TestPostContainersReread(t *testing.T) {
 
 	ioutil.WriteFile(hostConfigFilePath, data, 0666)
 
+	// To make sure that the volume does not exist yet
 	c := getContainer(eng, containerID, t)
 	if c.VolumeMounts()["/testVolume"] != nil {
 		t.Fatal("The volume '/testVolume' expected not to be mounted")
