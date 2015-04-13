@@ -200,8 +200,6 @@ func (daemon *Daemon) load(id string) (*Container, error) {
 		return container, fmt.Errorf("Container %s is stored at %s", container.ID, id)
 	}
 
-	container.readHostConfig()
-
 	return container, nil
 }
 
