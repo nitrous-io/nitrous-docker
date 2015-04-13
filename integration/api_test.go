@@ -10,12 +10,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/server"
+	"github.com/docker/docker/daemon"
 	"github.com/docker/docker/engine"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
@@ -406,6 +408,126 @@ func TestPostContainersRestart(t *testing.T) {
 
 	if !containerRunning(eng, containerID, t) {
 		t.Fatalf("Container should be running")
+	}
+
+	containerKill(eng, containerID, t)
+}
+
+func TestPostContainersReread(t *testing.T) {
+	eng := NewTestEngine(t)
+	defer mkDaemonFromEngine(eng, t).Nuke()
+
+	containerID := createTestContainer(eng,
+		&runconfig.Config{
+			Image:     unitTestImageID,
+			Cmd:       []string{"/bin/top"},
+			OpenStdin: true,
+		},
+		t,
+	)
+
+	req, err := http.NewRequest("GET", "/info?t=1", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var infoResponse struct {
+		DockerRootDir string
+	}
+
+	r := httptest.NewRecorder()
+	server.ServeRequest(eng, api.APIVERSION, r, req)
+	assertHttpNotError(r, t)
+	err = json.NewDecoder(r.Body).Decode(&infoResponse)
+	if err != nil {
+		t.Fatalf("Failed to decode response body: %v", r)
+	}
+	configFilePath := fmt.Sprintf("%s/containers/%s/config.json", infoResponse.DockerRootDir, containerID)
+
+	_, err = os.Lstat(configFilePath)
+	if os.IsNotExist(err) {
+		t.Fatalf("Config file does not exist: %s", configFilePath)
+	}
+
+	configJson, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		t.Fatalf("Can't read config file: %s", configFilePath)
+	}
+
+	var container daemon.Container
+	err = json.Unmarshal(configJson, &container)
+	if err != nil {
+		t.Fatalf("Can't decode the json: %s", string(configJson[:]))
+	}
+
+	container.Volumes = map[string]string{
+		"/testVolume": "/testVolume",
+	}
+
+	container.VolumesRW = map[string]bool{
+		"/testVolume": true,
+	}
+
+	data, err := json.Marshal(container)
+	if err != nil {
+		t.Fatalf("Can't marshal: %v", container)
+	}
+
+	ioutil.WriteFile(configFilePath, data, 0666)
+
+	hostConfigFilePath := fmt.Sprintf("%s/containers/%s/hostconfig.json", infoResponse.DockerRootDir, containerID)
+	_, err = os.Lstat(hostConfigFilePath)
+	if os.IsNotExist(err) {
+		t.Fatalf("Config file does not exist: %s", hostConfigFilePath)
+	}
+
+	hostConfigJson, err := ioutil.ReadFile(hostConfigFilePath)
+	if err != nil {
+		t.Fatalf("Can't read config file: %s", hostConfigFilePath)
+	}
+
+	var hostconfig runconfig.HostConfig
+	err = json.Unmarshal(hostConfigJson, &hostconfig)
+	if err != nil {
+		t.Fatalf("Can't decode the json: %s", string(hostConfigJson[:]))
+	}
+
+	hostconfig.Binds = []string{"/testVolume:/testVolume"}
+	data, err = json.Marshal(hostconfig)
+	if err != nil {
+		t.Fatalf("Can't marshal: %v", hostconfig)
+	}
+
+	ioutil.WriteFile(hostConfigFilePath, data, 0666)
+
+	c := getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/testVolume"] != nil {
+		t.Fatal("The volume '/testVolume' expected not to be mounted")
+	}
+
+	req, err = http.NewRequest("POST", "/containers/"+containerID+"/reread?t=1", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = httptest.NewRecorder()
+	server.ServeRequest(eng, api.APIVERSION, r, req)
+	assertHttpNotError(r, t)
+	if r.Code != http.StatusNoContent {
+		t.Fatalf("%d NO CONTENT expected, received %d\n", http.StatusNoContent, r.Code)
+	}
+
+	startContainer(eng, containerID, t)
+
+	// Give some time to the process to start
+	containerWaitTimeout(eng, containerID, t)
+
+	if !containerRunning(eng, containerID, t) {
+		t.Errorf("Container should be running")
+	}
+
+	c = getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/testVolume"] == nil {
+		t.Fatal("The volume '/testVolume' expected to be mounted")
 	}
 
 	containerKill(eng, containerID, t)
