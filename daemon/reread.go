@@ -29,6 +29,7 @@ func (daemon *Daemon) ContainerReread(job *engine.Job) engine.Status {
 						e := entities[p]
 
 						if container.ID == e.ID() {
+							// Delete the container data from the daemon and set new container data to it.
 							daemon.containers.Delete(container.ID)
 							if err := daemon.register(container, false); err != nil {
 								log.Debugf("Failed to register container %s: %s", container.ID, err)
