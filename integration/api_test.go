@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/builder"
 	"github.com/docker/docker/daemon"
 	"github.com/docker/docker/engine"
+	"github.com/docker/docker/nat"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
 )
@@ -425,12 +426,18 @@ func TestPostContainersReread(t *testing.T) {
 			Image:     unitTestImageID,
 			Cmd:       []string{"/bin/top"},
 			OpenStdin: true,
+			Volumes: map[string]struct{}{
+				"/oldVolume": {},
+			},
+			ExposedPorts: map[nat.Port]struct{}{
+				"22/tcp": {},
+			},
 		},
 		t,
 	)
 
 	// This is to get root directory for the container
-	// Use the api to get the container information, since there is no direct access to daemon
+	// Use the api to get the container information, since there is no direct access to the daemon
 	req, err := http.NewRequest("GET", "/info?t=1", bytes.NewReader([]byte{}))
 	if err != nil {
 		t.Fatal(err)
@@ -476,6 +483,14 @@ func TestPostContainersReread(t *testing.T) {
 		"/testVolume": true,
 	}
 
+	container.Config.Volumes = map[string]struct{}{
+		"/testVolume": {},
+	}
+
+	container.Config.ExposedPorts = map[nat.Port]struct{}{
+		"3000/tcp": {},
+	}
+
 	data, err := json.Marshal(container)
 	if err != nil {
 		t.Fatalf("Can't marshal: %v", container)
@@ -502,6 +517,12 @@ func TestPostContainersReread(t *testing.T) {
 	}
 
 	hostconfig.Binds = []string{"/testVolume:/testVolume"}
+	portBindings := make(nat.PortMap)
+	portBindings["3000/tcp"] = []nat.PortBinding{
+		{HostIp: "0.0.0.0", HostPort: "6022"},
+	}
+	hostconfig.PortBindings = portBindings
+
 	data, err = json.Marshal(hostconfig)
 	if err != nil {
 		t.Fatalf("Can't marshal: %v", hostconfig)
@@ -511,8 +532,25 @@ func TestPostContainersReread(t *testing.T) {
 
 	// To make sure that the volume does not exist yet
 	c := getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/oldVolume"] == nil {
+		t.Fatal("The volume '/oldVolume' expected to be mounted")
+	}
+
 	if c.VolumeMounts()["/testVolume"] != nil {
 		t.Fatal("The volume '/testVolume' expected not to be mounted")
+	}
+
+	if !c.Exposes("22/tcp") {
+		t.Fatal("The port '22/tcp' expected to be exposed")
+	}
+
+	if c.Exposes("3000/tcp") {
+		t.Fatal("The port '3000/tcp' expected not to be exposed")
+	}
+
+	_, exist := c.NetworkSettings.Ports["3000/tcp"]
+	if exist {
+		t.Fatal("The port '3000/tcp' expected not to exist in port mappings")
 	}
 
 	req, err = http.NewRequest("POST", "/containers/"+containerID+"/reread?t=1", bytes.NewReader([]byte{}))
@@ -536,8 +574,33 @@ func TestPostContainersReread(t *testing.T) {
 	}
 
 	c = getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/oldVolume"] != nil {
+		t.Fatal("The volume '/oldVolume' expected not to be mounted")
+	}
+
 	if c.VolumeMounts()["/testVolume"] == nil {
 		t.Fatal("The volume '/testVolume' expected to be mounted")
+	}
+
+	if c.Exposes("22/tcp") {
+		t.Fatal("The port '22/tcp' expected not to be exposed")
+	}
+
+	if !c.Exposes("3000/tcp") {
+		t.Fatal("The port '3000/tcp' expected to be exposed")
+	}
+
+	portMaps, exist := c.NetworkSettings.Ports["3000/tcp"]
+	if !exist {
+		t.Fatal("The port '3000/tcp' expected to exist in port mappings")
+	}
+
+	if len(portMaps) != 1 {
+		t.Fatal("The port '3000/tcp' expected to have one port mappings")
+	}
+
+	if portMaps[0].HostIp != "0.0.0.0" || portMaps[0].HostPort != "6022" {
+		t.Fatal("The port '3000/tcp' expected to map to 0.0.0.0:6022")
 	}
 
 	containerKill(eng, containerID, t)
