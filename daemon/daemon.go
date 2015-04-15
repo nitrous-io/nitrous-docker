@@ -128,6 +128,7 @@ func (daemon *Daemon) Install(eng *engine.Engine) error {
 		"pause":             daemon.ContainerPause,
 		"resize":            daemon.ContainerResize,
 		"restart":           daemon.ContainerRestart,
+		"reload":            daemon.ContainerReload,
 		"start":             daemon.ContainerStart,
 		"stop":              daemon.ContainerStop,
 		"top":               daemon.ContainerTop,

@@ -10,13 +10,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/server"
+	"github.com/docker/docker/daemon"
 	"github.com/docker/docker/engine"
+	"github.com/docker/docker/nat"
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/vendor/src/code.google.com/p/go/src/pkg/archive/tar"
 )
@@ -406,6 +409,195 @@ func TestPostContainersRestart(t *testing.T) {
 
 	if !containerRunning(eng, containerID, t) {
 		t.Fatalf("Container should be running")
+	}
+
+	containerKill(eng, containerID, t)
+}
+
+func TestPostContainersReload(t *testing.T) {
+	eng := NewTestEngine(t)
+	defer mkDaemonFromEngine(eng, t).Nuke()
+
+	containerID := createTestContainer(eng,
+		&runconfig.Config{
+			Image:     unitTestImageID,
+			Cmd:       []string{"/bin/top"},
+			OpenStdin: true,
+			Volumes: map[string]struct{}{
+				"/oldVolume": {},
+			},
+			ExposedPorts: map[nat.Port]struct{}{
+				"22/tcp": {},
+			},
+		},
+		t,
+	)
+
+	// This is to get root directory for the container
+	// Use the api to get the container information, since there is no direct access to the daemon
+	req, err := http.NewRequest("GET", "/info?t=1", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var infoResponse struct {
+		DockerRootDir string
+	}
+
+	r := httptest.NewRecorder()
+	server.ServeRequest(eng, api.APIVERSION, r, req)
+	assertHttpNotError(r, t)
+	err = json.NewDecoder(r.Body).Decode(&infoResponse)
+	if err != nil {
+		t.Fatalf("Failed to decode response body: %v", r)
+	}
+
+	// Read config.json file and change it.
+	// I don't use container.ToDisk() to simulate it properly.
+	configFilePath := fmt.Sprintf("%s/containers/%s/config.json", infoResponse.DockerRootDir, containerID)
+
+	_, err = os.Lstat(configFilePath)
+	if os.IsNotExist(err) {
+		t.Fatalf("Config file does not exist: %s", configFilePath)
+	}
+
+	configJson, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		t.Fatalf("Can't read config file: %s", configFilePath)
+	}
+
+	var container daemon.Container
+	err = json.Unmarshal(configJson, &container)
+	if err != nil {
+		t.Fatalf("Can't decode the json: %s", string(configJson[:]))
+	}
+
+	container.Volumes = map[string]string{
+		"/testVolume": "/testVolume",
+	}
+
+	container.VolumesRW = map[string]bool{
+		"/testVolume": true,
+	}
+
+	container.Config.Volumes = map[string]struct{}{
+		"/testVolume": {},
+	}
+
+	container.Config.ExposedPorts = map[nat.Port]struct{}{
+		"3000/tcp": {},
+	}
+
+	data, err := json.Marshal(container)
+	if err != nil {
+		t.Fatalf("Can't marshal: %v", container)
+	}
+
+	ioutil.WriteFile(configFilePath, data, 0666)
+
+	// Read hostconfig.json file and change it.
+	hostConfigFilePath := fmt.Sprintf("%s/containers/%s/hostconfig.json", infoResponse.DockerRootDir, containerID)
+	_, err = os.Lstat(hostConfigFilePath)
+	if os.IsNotExist(err) {
+		t.Fatalf("Config file does not exist: %s", hostConfigFilePath)
+	}
+
+	hostConfigJson, err := ioutil.ReadFile(hostConfigFilePath)
+	if err != nil {
+		t.Fatalf("Can't read config file: %s", hostConfigFilePath)
+	}
+
+	var hostconfig runconfig.HostConfig
+	err = json.Unmarshal(hostConfigJson, &hostconfig)
+	if err != nil {
+		t.Fatalf("Can't decode the json: %s", string(hostConfigJson[:]))
+	}
+
+	hostconfig.Binds = []string{"/testVolume:/testVolume"}
+	portBindings := make(nat.PortMap)
+	portBindings["3000/tcp"] = []nat.PortBinding{
+		{HostIp: "0.0.0.0", HostPort: "6022"},
+	}
+	hostconfig.PortBindings = portBindings
+
+	data, err = json.Marshal(hostconfig)
+	if err != nil {
+		t.Fatalf("Can't marshal: %v", hostconfig)
+	}
+
+	ioutil.WriteFile(hostConfigFilePath, data, 0666)
+
+	// To make sure that the volume does not exist yet
+	c := getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/oldVolume"] == nil {
+		t.Fatal("The volume '/oldVolume' expected to be mounted")
+	}
+
+	if c.VolumeMounts()["/testVolume"] != nil {
+		t.Fatal("The volume '/testVolume' expected not to be mounted")
+	}
+
+	if !c.Exposes("22/tcp") {
+		t.Fatal("The port '22/tcp' expected to be exposed")
+	}
+
+	if c.Exposes("3000/tcp") {
+		t.Fatal("The port '3000/tcp' expected not to be exposed")
+	}
+
+	_, exist := c.NetworkSettings.Ports["3000/tcp"]
+	if exist {
+		t.Fatal("The port '3000/tcp' expected not to exist in port mappings")
+	}
+
+	req, err = http.NewRequest("POST", "/containers/"+containerID+"/reload?t=1", bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = httptest.NewRecorder()
+	server.ServeRequest(eng, api.APIVERSION, r, req)
+	assertHttpNotError(r, t)
+	if r.Code != http.StatusNoContent {
+		t.Fatalf("%d NO CONTENT expected, received %d\n", http.StatusNoContent, r.Code)
+	}
+
+	startContainer(eng, containerID, t)
+
+	// Give some time to the process to start
+	containerWaitTimeout(eng, containerID, t)
+
+	if !containerRunning(eng, containerID, t) {
+		t.Errorf("Container should be running")
+	}
+
+	c = getContainer(eng, containerID, t)
+	if c.VolumeMounts()["/oldVolume"] != nil {
+		t.Fatal("The volume '/oldVolume' expected not to be mounted")
+	}
+
+	if c.VolumeMounts()["/testVolume"] == nil {
+		t.Fatal("The volume '/testVolume' expected to be mounted")
+	}
+
+	if c.Exposes("22/tcp") {
+		t.Fatal("The port '22/tcp' expected not to be exposed")
+	}
+
+	if !c.Exposes("3000/tcp") {
+		t.Fatal("The port '3000/tcp' expected to be exposed")
+	}
+
+	portMaps, exist := c.NetworkSettings.Ports["3000/tcp"]
+	if !exist {
+		t.Fatal("The port '3000/tcp' expected to exist in port mappings")
+	}
+
+	if len(portMaps) != 1 {
+		t.Fatal("The port '3000/tcp' expected to have one port mappings")
+	}
+
+	if portMaps[0].HostIp != "0.0.0.0" || portMaps[0].HostPort != "6022" {
+		t.Fatal("The port '3000/tcp' expected to map to 0.0.0.0:6022")
 	}
 
 	containerKill(eng, containerID, t)
