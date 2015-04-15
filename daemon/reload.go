@@ -5,7 +5,7 @@ import (
 	"github.com/docker/docker/engine"
 )
 
-func (daemon *Daemon) ContainerReread(job *engine.Job) engine.Status {
+func (daemon *Daemon) ContainerReload(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
 		return job.Errorf("Usage: %s CONTAINER\n", job.Name)
 	}
@@ -48,6 +48,6 @@ func (daemon *Daemon) ContainerReread(job *engine.Job) engine.Status {
 		log.Debugf("Cannot load container %s because it was created with another graph driver.", container.ID)
 	}
 
-	container.LogEvent("reread")
+	container.LogEvent("reload")
 	return engine.StatusOK
 }
