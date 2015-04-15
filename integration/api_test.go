@@ -417,7 +417,7 @@ func TestPostContainersRestart(t *testing.T) {
 	containerKill(eng, containerID, t)
 }
 
-func TestPostContainersReread(t *testing.T) {
+func TestPostContainersReload(t *testing.T) {
 	eng := NewTestEngine(t)
 	defer mkDaemonFromEngine(eng, t).Nuke()
 
@@ -553,7 +553,7 @@ func TestPostContainersReread(t *testing.T) {
 		t.Fatal("The port '3000/tcp' expected not to exist in port mappings")
 	}
 
-	req, err = http.NewRequest("POST", "/containers/"+containerID+"/reread?t=1", bytes.NewReader([]byte{}))
+	req, err = http.NewRequest("POST", "/containers/"+containerID+"/reload?t=1", bytes.NewReader([]byte{}))
 	if err != nil {
 		t.Fatal(err)
 	}
