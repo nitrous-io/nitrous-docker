@@ -752,14 +752,14 @@ func postContainersRestart(eng *engine.Engine, version version.Version, w http.R
 	return nil
 }
 
-func postContainersReread(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+func postContainersReload(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := parseForm(r); err != nil {
 		return err
 	}
 	if vars == nil {
 		return fmt.Errorf("Missing parameter")
 	}
-	job := eng.Job("reread", vars["name"])
+	job := eng.Job("reload", vars["name"])
 	if err := job.Run(); err != nil {
 		return err
 	}
@@ -1370,7 +1370,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 			"/containers/{name:.*}/pause":   postContainersPause,
 			"/containers/{name:.*}/unpause": postContainersUnpause,
 			"/containers/{name:.*}/restart": postContainersRestart,
-			"/containers/{name:.*}/reread":  postContainersReread,
+			"/containers/{name:.*}/reload":  postContainersReload,
 			"/containers/{name:.*}/start":   postContainersStart,
 			"/containers/{name:.*}/stop":    postContainersStop,
 			"/containers/{name:.*}/wait":    postContainersWait,
