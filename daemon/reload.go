@@ -11,7 +11,10 @@ func (daemon *Daemon) ContainerReload(job *engine.Job) engine.Status {
 	}
 
 	var name = job.Args[0]
-	container := daemon.Get(name)
+	container, err := daemon.Get(name)
+	if err != nil {
+		return job.Errorf("Failed to get container %s: %s\n", name, err)
+	}
 	if container == nil {
 		return job.Errorf("No such container: %s\n", name)
 	}
@@ -21,7 +24,7 @@ func (daemon *Daemon) ContainerReload(job *engine.Job) engine.Status {
 	}
 
 	id := container.ID
-	container, err := daemon.load(id)
+	container, err = daemon.load(id)
 	if err != nil {
 		return job.Errorf("Failed to load container %v: %v\n", id, err)
 	}
