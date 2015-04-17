@@ -248,9 +248,9 @@ func (d *Daemon) ContainerExecStart(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
-func (d *Daemon) ContainerExecStop(job *engine.Job) error {
+func (d *Daemon) ContainerExecStop(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
-		return fmt.Errorf("Usage: %s [options] exec", job.Name)
+		return job.Errorf("Usage: %s [options] exec", job.Name)
 	}
 
 	var (
@@ -259,7 +259,7 @@ func (d *Daemon) ContainerExecStop(job *engine.Job) error {
 
 	execConfig, err := d.getExecConfig(execName)
 	if err != nil {
-		return err
+		return job.Error(err)
 	}
 
 	func() {
@@ -270,23 +270,23 @@ func (d *Daemon) ContainerExecStop(job *engine.Job) error {
 		}
 	}()
 	if err != nil {
-		return err
+		return job.Error(err)
 	}
 	if execConfig.Pid < 1 {
-		return fmt.Errorf("exec %s has invalid pid %d", execConfig.ID, execConfig.Pid)
+		return job.Errorf("exec %s has invalid pid %d", execConfig.ID, execConfig.Pid)
 	}
 
 	logrus.Debugf("stopping exec command %s with pid %d in container %s", execConfig.ID, execConfig.Pid, execConfig.Container.ID)
 
 	p, err := os.FindProcess(execConfig.Pid)
 	if err != nil {
-		return err
+		return job.Error(err)
 	}
 	if err := p.Kill(); err != nil {
-		return err
+		return job.Error(err)
 	}
 	_, err = p.Wait()
-	return err
+	return job.Error(err)
 }
 
 // This is called by container#monitorExec
