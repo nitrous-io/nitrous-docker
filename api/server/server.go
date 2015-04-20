@@ -761,6 +761,21 @@ func postContainersRestart(eng *engine.Engine, version version.Version, w http.R
 	return nil
 }
 
+func postContainersReload(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	job := eng.Job("reload", vars["name"])
+	if err := job.Run(); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func postContainerRename(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := parseForm(r); err != nil {
 		return err
@@ -1242,6 +1257,27 @@ func postContainerExecResize(eng *engine.Engine, version version.Version, w http
 	return nil
 }
 
+func postContainerExecStop(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := parseForm(r); err != nil {
+		return err
+	}
+	if vars == nil {
+		return fmt.Errorf("Missing parameter")
+	}
+	job := eng.Job("execStop", vars["name"])
+	// TODO (dqminh): t is not implemented right now
+	job.Setenv("t", r.Form.Get("t"))
+	if err := job.Run(); err != nil {
+		if err.Error() == "Exec process is stopped" {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func optionsHandler(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	w.WriteHeader(http.StatusOK)
 	return nil
@@ -1363,6 +1399,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, corsHeaders stri
 			"/containers/{name:.*}/pause":   postContainersPause,
 			"/containers/{name:.*}/unpause": postContainersUnpause,
 			"/containers/{name:.*}/restart": postContainersRestart,
+			"/containers/{name:.*}/reload":  postContainersReload,
 			"/containers/{name:.*}/start":   postContainersStart,
 			"/containers/{name:.*}/stop":    postContainersStop,
 			"/containers/{name:.*}/wait":    postContainersWait,
@@ -1372,6 +1409,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, corsHeaders stri
 			"/containers/{name:.*}/exec":    postContainerExecCreate,
 			"/exec/{name:.*}/start":         postContainerExecStart,
 			"/exec/{name:.*}/resize":        postContainerExecResize,
+			"/exec/{name:.*}/stop":          postContainerExecStop,
 			"/containers/{name:.*}/rename":  postContainerRename,
 		},
 		"DELETE": {
