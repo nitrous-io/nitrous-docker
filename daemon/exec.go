@@ -276,7 +276,7 @@ func (d *Daemon) ContainerExecStop(job *engine.Job) engine.Status {
 		return job.Errorf("exec %s has invalid pid %d", execConfig.ID, execConfig.Pid)
 	}
 
-	logrus.Debugf("stopping exec command %s with pid %d in container %s", execConfig.ID, execConfig.Pid, execConfig.Container.ID)
+	log.Debugf("stopping exec command %s with pid %d in container %s", execConfig.ID, execConfig.Pid, execConfig.Container.ID)
 
 	p, err := os.FindProcess(execConfig.Pid)
 	if err != nil {
