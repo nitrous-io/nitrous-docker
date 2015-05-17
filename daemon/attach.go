@@ -14,6 +14,14 @@ import (
 	"github.com/docker/docker/utils"
 )
 
+var (
+	disableDetach bool
+)
+
+func init() {
+	disableDetach = os.Getenv("DISABLE_DETACH") == "true"
+}
+
 func (daemon *Daemon) ContainerAttach(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
 		return job.Errorf("Usage: %s CONTAINER\n", job.Name)
@@ -157,7 +165,7 @@ func (daemon *Daemon) Attach(streamConfig *StreamConfig, openStdin, stdinOnce, t
 		}()
 
 		var err error
-		if tty {
+		if tty && !disableDetach {
 			_, err = utils.CopyEscapable(cStdin, stdin)
 		} else {
 			_, err = io.Copy(cStdin, stdin)
