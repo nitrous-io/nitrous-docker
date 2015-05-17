@@ -38,7 +38,13 @@ var (
 	ErrNoTTY                 = errors.New("No PTY found")
 	ErrContainerStart        = errors.New("The container failed to start. Unknown error")
 	ErrContainerStartTimeout = errors.New("The container failed to start due to timed out.")
+
+	disableDetach bool
 )
+
+func init() {
+	disableDetach = os.Getenv("DISABLE_DETACH") == "true"
+}
 
 type StreamConfig struct {
 	stdout    *broadcastwriter.BroadcastWriter
@@ -928,7 +934,7 @@ func attach(streamConfig *StreamConfig, openStdin, stdinOnce, tty bool, stdin io
 		}()
 
 		var err error
-		if tty {
+		if tty && !disableDetach {
 			_, err = copyEscapable(cStdin, stdin)
 		} else {
 			_, err = io.Copy(cStdin, stdin)
