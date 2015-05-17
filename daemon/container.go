@@ -38,6 +38,8 @@ var (
 	// ErrRootFSReadOnly is returned when a container
 	// rootfs is marked readonly.
 	ErrRootFSReadOnly = errors.New("container rootfs is marked read-only")
+
+	disableDetach bool
 )
 
 type streamConfig struct {
@@ -45,6 +47,10 @@ type streamConfig struct {
 	stderr    *broadcaster.Unbuffered
 	stdin     io.ReadCloser
 	stdinPipe io.WriteCloser
+}
+
+func init() {
+	disableDetach = os.Getenv("DISABLE_DETACH") == "true"
 }
 
 // CommonContainer holds the fields for a container which are
@@ -985,7 +991,7 @@ func attach(streamConfig *streamConfig, openStdin, stdinOnce, tty bool, stdin io
 		}()
 
 		var err error
-		if tty {
+		if tty && !disableDetach {
 			_, err = copyEscapable(cStdin, stdin)
 		} else {
 			_, err = io.Copy(cStdin, stdin)
