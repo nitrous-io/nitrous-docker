@@ -39,6 +39,8 @@ var (
 	ErrContainerStart          = errors.New("The container failed to start. Unknown error")
 	ErrContainerStartTimeout   = errors.New("The container failed to start due to timed out.")
 	ErrContainerRootfsReadonly = errors.New("container rootfs is marked read-only")
+
+	disableDetach bool
 )
 
 type ErrContainerNotRunning struct {
@@ -47,6 +49,10 @@ type ErrContainerNotRunning struct {
 
 func (e ErrContainerNotRunning) Error() string {
 	return fmt.Sprintf("Container %s is not running", e.id)
+}
+
+func init() {
+	disableDetach = os.Getenv("DISABLE_DETACH") == "true"
 }
 
 type StreamConfig struct {
@@ -989,7 +995,7 @@ func attach(streamConfig *StreamConfig, openStdin, stdinOnce, tty bool, stdin io
 		}()
 
 		var err error
-		if tty {
+		if tty && !disableDetach {
 			_, err = copyEscapable(cStdin, stdin)
 		} else {
 			_, err = io.Copy(cStdin, stdin)
