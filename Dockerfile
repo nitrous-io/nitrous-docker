@@ -192,8 +192,10 @@ RUN ./contrib/download-frozen-image.sh /docker-frozen-images \
 # Download man page generator
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
-	&& git clone -b v1.0.3 https://github.com/cpuguy83/go-md2man.git "$GOPATH/src/github.com/cpuguy83/go-md2man" \
-	&& git clone -b v1.2 https://github.com/russross/blackfriday.git "$GOPATH/src/github.com/russross/blackfriday" \
+	&& git clone https://github.com/cpuguy83/go-md2man.git "$GOPATH/src/github.com/cpuguy83/go-md2man" \
+	&& cd "$GOPATH/src/github.com/cpuguy83/go-md2man" && git checkout 2724a9c9051aa62e9cca11304e7dd518e9e41599 \
+	&& git clone https://github.com/russross/blackfriday.git "$GOPATH/src/github.com/russross/blackfriday" \
+	&& cd "$GOPATH/src/github.com/russross/blackfriday" && git checkout 006144af03eeeff1037240a71865a9fd61f1c25f\
 	&& go get -v -d github.com/cpuguy83/go-md2man \
 	&& go build -v -o /usr/local/bin/go-md2man github.com/cpuguy83/go-md2man \
 	&& rm -rf "$GOPATH"
